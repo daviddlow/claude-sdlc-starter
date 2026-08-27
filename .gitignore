@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.claude/.fix-task
+.claude/settings.local.json
+build.log
+triage.md
+result.json
+.env*
+secrets/

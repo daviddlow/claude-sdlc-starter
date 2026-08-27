@@ -1,0 +1,82 @@
+# Stage 6: closing the loop.
+# The trigger layer for monitoring/detect.py: a schedule invokes the
+# deterministic detection script; only when a band is breached is Claude
+# invoked, and bands.yaml sets what it may do. A loop can begin and end
+# without anyone starting it — people triage the resulting intent.md, they
+# no longer have to start the work.
+name: Control-band monitor
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # In production, replace sample_metrics.csv with a query against the
+      # metrics store (Prometheus, the CI system's API, or equivalent).
+      - name: Run deterministic detection
+        id: detect
+        run: |
+          python3 monitoring/detect.py \
+            --config monitoring/bands.yaml \
+            --data monitoring/sample_metrics.csv > report.json
+          cat report.json
+          echo "tier=$(jq -r '.tier' report.json)" >> "$GITHUB_OUTPUT"
+          echo "action=$(jq -r '.action' report.json)" >> "$GITHUB_OUTPUT"
+
+      # 2 sigma: diagnose, read-only, with the tools bands.yaml allows.
+      - name: Diagnose (2σ — read-only)
+        if: steps.detect.outputs.tier == '2'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          [ -z "$ANTHROPIC_API_KEY" ] && echo "no API key; skipping" && exit 0
+          npm install -g @anthropic-ai/claude-code
+          claude -p "A control band was breached: $(cat report.json).
+          Diagnose the anomaly using read-only tools. Write your diagnosis
+          as intent/band-breach-$(date +%Y%m%d)/intent.md in the Stage 1
+          format from templates/intent.md: the anomaly and its evidence, a
+          proposed outcome, the affected systems, and any open questions." \
+            --allowedTools "$(jq -r '.tier_config.tools' report.json),Write"
+
+      # 3 sigma: propose — only through gated routes (a PR into the review
+      # gate, or the pre-approved rollback runbook). Never direct action.
+      - name: Propose (3σ — gated routes only)
+        if: steps.detect.outputs.tier == '3'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          [ -z "$ANTHROPIC_API_KEY" ] && echo "no API key; skipping" && exit 0
+          npm install -g @anthropic-ai/claude-code
+          claude -p "A control band breached 3 sigma: $(cat report.json).
+          Diagnose it and write intent/band-breach-$(date +%Y%m%d)/intent.md
+          in the Stage 1 format. If the fix is bounded (e.g. quarantine a
+          flaky test or revert a bad commit), also prepare the change in the
+          working tree — it will be opened as a PR into the review gate; you
+          have no route to push to main or to production." \
+            --allowedTools "Read,Grep,Glob,Write,Edit,Bash(make test)"
+
+      - name: Open finding as PR into the review gate
+        if: steps.detect.outputs.tier >= '2'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: monitor/band-breach
+          title: 'monitor: control-band breach finding'
+          commit-message: 'monitor: intent.md and proposed fix for control-band breach'
+          body: |
+            Opened automatically by the control-band monitor. Detection was
+            deterministic (see monitoring/detect.py); the diagnosis enters
+            the loop as intent.md and any bounded fix goes through the
+            normal review gate. Service owner: triage as fix now, schedule,
+            or dismiss — dismissals tune monitoring/bands.yaml. When a fix
+            ships, add an eval for the incident to evals/.

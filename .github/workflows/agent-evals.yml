@@ -1,0 +1,56 @@
+# Stage 4: continuous evals in CI.
+# The configuration that steers the agent (CLAUDE.md, skills, hooks,
+# REVIEW.md) gets the regression testing that code gets: the suite runs on
+# any change to it, and nightly, so a skill change that drops the pass rate
+# is reviewed before it merges.
+name: Agent evals
+on:
+  pull_request:
+    paths: ['CLAUDE.md', 'REVIEW.md', '.claude/**', 'evals/**']
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check API key
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "ANTHROPIC_API_KEY not configured; eval run skipped."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install Claude Code
+        if: steps.key.outputs.present == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Run eval suite
+        if: steps.key.outputs.present == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          pass=0; fail=0
+          for eval in evals/*.json; do
+            echo "== $eval =="
+            git stash --include-untracked || true
+            claude -p "$(jq -r '.prompt' "$eval")" \
+              --allowedTools "$(jq -r '.allowed_tools' "$eval")" \
+              --output-format json > result.json || true
+            if ./evals/check.sh "$eval" result.json; then
+              pass=$((pass+1))
+            else
+              fail=$((fail+1))
+            fi
+            git checkout -- . && git clean -fd src tests || true
+          done
+          echo "Eval results: $pass passed, $fail failed" | tee -a "$GITHUB_STEP_SUMMARY"
+          # The pass-rate threshold is enforced as a merge check.
+          [ "$fail" -eq 0 ]

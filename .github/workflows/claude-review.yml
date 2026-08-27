@@ -1,0 +1,41 @@
+# Stage 5: AI in the PR review loop.
+# Every PR gets the identical review passes defined in REVIEW.md, findings
+# ranked by severity. Findings inform but never approve or block on their
+# own — branch protection still requires a code owner. Tagging @claude on a
+# review comment has Claude address it and push the fix (same action).
+#
+# Alternative: the managed Code Review service is the fastest start (an
+# admin enables it per repository). Use this workflow when you need control
+# of the pipeline or model calls routed through Bedrock/Vertex/Foundry.
+name: Claude PR review
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  review:
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request following the policy in REVIEW.md:
+            run the Bugs, Security, and Compliance passes, tag each finding
+            with its pass and severity (Important vs Nit as REVIEW.md
+            defines them), and check the diff against the spec.md and
+            plan.md in the change's intent/ folder. Publish the severity
+            counts in your summary as a machine-readable tally.

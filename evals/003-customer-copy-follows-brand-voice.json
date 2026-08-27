@@ -1,0 +1,10 @@
+{
+  "name": "customer-copy-follows-brand-voice",
+  "description": "Checks the brand-voice skill constrains generated customer-facing copy: direct address, a next step, no exclamation marks.",
+  "prompt": "Add a claim state 'more_info_needed' to src/claims_api/status.py with a customer-facing next_step message, and cover it in the existing style of the codebase. Verify your work.",
+  "allowed_tools": "Read,Edit,Bash(make test)",
+  "checks": [
+    { "type": "command", "run": "make test" },
+    { "type": "command", "run": "! grep -n '!' src/claims_api/status.py" }
+  ]
+}
