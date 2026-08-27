@@ -29,7 +29,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # Skip gracefully until the ANTHROPIC_API_KEY secret is configured,
+      # consistent with the other agent workflows in this repo.
+      - name: Check API key
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "ANTHROPIC_API_KEY not configured; review pass skipped."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: anthropics/claude-code-action@v1
+        if: steps.key.outputs.present == 'true'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
