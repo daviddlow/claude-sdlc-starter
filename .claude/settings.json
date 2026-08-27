@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/production-gate.sh"
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/production-gate.sh"
           }
         ]
       },
@@ -28,11 +28,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/protect-paths.sh"
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/protect-paths.sh"
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/protect-tests.sh"
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/protect-tests.sh"
           }
         ]
       }
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/lint-on-edit.sh"
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/lint-on-edit.sh"
           }
         ]
       }

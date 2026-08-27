@@ -44,7 +44,7 @@ jobs:
             claude -p "$(jq -r '.prompt' "$eval")" \
               --allowedTools "$(jq -r '.allowed_tools' "$eval")" \
               --output-format json > result.json || true
-            if ./evals/check.sh "$eval" result.json; then
+            if bash evals/check.sh "$eval" result.json; then
               pass=$((pass+1))
             else
               fail=$((fail+1))
