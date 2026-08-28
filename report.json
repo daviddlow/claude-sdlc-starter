@@ -1,0 +1,18 @@
+{
+  "metric": "ci_test_failure_rate",
+  "rules": "western_electric",
+  "latest": 0.31,
+  "mean": 0.0997,
+  "sigma": 0.0102,
+  "z": 20.52,
+  "tier": 3,
+  "rule": "we1_beyond_3_sigma",
+  "action": "propose",
+  "tier_config": {
+    "action": "propose",
+    "routes": [
+      "pull_request",
+      "runbook:rollback-deploy"
+    ]
+  }
+}
