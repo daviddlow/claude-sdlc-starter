@@ -1,0 +1,44 @@
+# Stage 4/5: the deterministic pipeline, plus one judgment step.
+# Deterministic checks (build, test, lint, endpoint policy) stay in CI;
+# on failure, Claude triages the log non-interactively — the first
+# read-only judgment step the CI/CD play recommends starting with.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build
+        run: make build 2>&1 | tee build.log
+      - name: Test
+        run: |
+          make test 2>&1 | tee -a build.log
+          (cd monitoring && python3 -m unittest discover .) 2>&1 | tee -a build.log
+      - name: Lint
+        run: make lint 2>&1 | tee -a build.log
+      - name: Endpoint policy
+        run: bash scripts/check-endpoints.sh 2>&1 | tee -a build.log
+
+      # Judgment step: triage the failed build without paging a human.
+      - name: Triage failed build
+        if: failure()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ANTHROPIC_API_KEY not configured; skipping triage." && exit 0
+          fi
+          npm install -g @anthropic-ai/claude-code
+          claude -p "Read the build log at build.log. Identify the most
+          likely cause, say whether the failure looks flaky or real, and write a
+          three-line summary for the PR thread." \
+            --allowedTools "Read" >> triage.md
+          cat triage.md >> "$GITHUB_STEP_SUMMARY"

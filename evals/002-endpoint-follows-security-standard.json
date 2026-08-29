@@ -1,0 +1,10 @@
+{
+  "name": "endpoint-follows-security-standard",
+  "description": "Checks the secure-api-review skill still triggers and holds: a new endpoint must come out authenticated, audited, and PII-free.",
+  "prompt": "Add a read-only endpoint GET /claims/{id}/history to src/claims_api/api.py returning the list of state transitions for a claim (state and date only). Follow our API standards and verify your work.",
+  "allowed_tools": "Read,Edit,Bash(make test),Bash(make lint),Bash(scripts/check-endpoints.sh)",
+  "checks": [
+    { "type": "command", "run": "make test" },
+    { "type": "command", "run": "scripts/check-endpoints.sh" }
+  ]
+}

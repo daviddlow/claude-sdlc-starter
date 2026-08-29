@@ -1,0 +1,61 @@
+# Stage 2: the requirements-and-design pass, automated.
+# The acceptance of intent.md (its merge to main) is the trigger: a
+# non-interactive job runs the pass with the organization's skills loaded
+# and commits spec.md as a pull request. From this point the product
+# owner's first involvement is the review.
+name: Spec from intent
+on:
+  push:
+    branches: [main]
+    paths: ['intent/**/intent.md']
+
+jobs:
+  write-spec:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find intents without specs
+        id: intents
+        run: |
+          missing=""
+          for intent in intent/*/intent.md; do
+            dir=$(dirname "$intent")
+            [ -f "$dir/spec.md" ] || missing="$missing $dir"
+          done
+          echo "dirs=$missing" >> "$GITHUB_OUTPUT"
+      - name: Draft spec.md
+        if: steps.intents.outputs.dirs != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ANTHROPIC_API_KEY not configured; skipping." && exit 0
+          fi
+          npm install -g @anthropic-ai/claude-code
+          for dir in ${{ steps.intents.outputs.dirs }}; do
+            claude -p "Read $dir/intent.md and produce a requirements and
+            design spec for integrating it into our existing codebase. Apply
+            the skills available to you so the plan conforms to our brand
+            guidelines, security policies and UX standards. Document the spec
+            fully as $dir/spec.md using templates/spec.md, ready to hand to
+            the engineering team. Describe clearly any areas of concern,
+            especially where you cannot satisfy contradicting policies." \
+              --allowedTools "Read,Write,Glob,Grep"
+          done
+      - name: Open spec PR for product-owner review
+        if: steps.intents.outputs.dirs != ''
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: spec/auto-draft
+          title: 'spec: draft from accepted intent'
+          commit-message: 'spec: draft requirements and design from accepted intent'
+          body: |
+            Automated Stage 2 pass. The product owner reviews this spec —
+            does it solve the stated problem, and are the open questions
+            from intent.md answered or carried forward? Work the flagged
+            concerns first; each is resolved with its policy owner before
+            engineering sees the spec. Accepting (merging) this spec is
+            what starts plan mode in Stage 3.
